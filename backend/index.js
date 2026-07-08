@@ -135,12 +135,14 @@ app.post("/webhook", async (req, res) => {
         .select("id, messages(*)")
         .eq("customer_phone", customerPhone)
         .eq("company_id", companyId)
-        .single();
+        .maybeSingle();
 
       // Get last 10 messages sorted by time
       const history = existingConv?.messages
         ?.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
         ?.slice(-10) ?? [];
+
+      console.log(`[history-debug] phone=${customerPhone} companyId=${companyId} historyLength=${history.length}`);
 
       // 2. Search knowledge base
       const { data: chunks, error: searchError } = await supabase.rpc(
@@ -180,7 +182,7 @@ app.post("/webhook", async (req, res) => {
             status: "open",
             company_id: companyId,
           },
-          { onConflict: "customer_phone" }
+          { onConflict: "customer_phone,company_id" }
         )
         .select()
         .single();
@@ -189,6 +191,8 @@ app.post("/webhook", async (req, res) => {
         console.error("Conversation upsert error:", convError);
         return;
       }
+
+      console.log(`[history-debug] using conversation_id=${conv.id}`);
 
       await supabase.from("messages").insert([
         { conversation_id: conv.id, role: "user", content: customerText },
