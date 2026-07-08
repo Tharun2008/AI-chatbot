@@ -26,15 +26,20 @@ export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (userId) fetchConversations();
   }, [userId]);
 
   async function fetchConversations() {
+    setError(null);
     try {
       const data = await getConversations(userId!);
       setConversations(data);
+    } catch (err) {
+      console.error("Failed to fetch conversations:", err);
+      setError("Couldn't load conversations. Please refresh, or check that the backend is running.");
     } finally {
       setLoading(false);
     }
@@ -69,7 +74,11 @@ export default function ConversationsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-            {loading ? (
+            {error ? (
+              <div className="p-4 m-4 rounded-xl bg-red-50 text-red-600 text-sm">
+                {error}
+              </div>
+            ) : loading ? (
               <div className="space-y-3 p-4">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />

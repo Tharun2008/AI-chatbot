@@ -107,22 +107,24 @@ app.post("/webhook", async (req, res) => {
 
   try {
     const customerPhone = req.body?.From?.replace("whatsapp:", "");
+    const incomingNumber = req.body?.To; // e.g. "whatsapp:+14155238886" - identifies which tenant this message is for
     const customerText = req.body?.Body;
 
     if (!customerPhone || !customerText) return;
 
     console.log(`Message from ${customerPhone}: ${customerText}`);
 
-    // Look up company
-    const { data: company } = await supabase
+    // Look up company by the WhatsApp number the customer messaged (multi-tenant routing)
+    const { data: company, error: companyError } = await supabase
       .from("companies")
       .select("id, system_prompt")
-      .eq("clerk_user_id", process.env.DEFAULT_CLERK_USER_ID)
-      .single();
+      .eq("twilio_whatsapp_number", incomingNumber)
+      .maybeSingle();
+    if (companyError) console.error("[company-debug] lookup error:", companyError);
 
     const companyId = company?.id ?? null;
     const systemPrompt = company?.system_prompt ??
-      "You are a helpful WhatsApp customer support assistant. Answer ONLY using the context provided. If the answer is not in the context, say: 'I don't have that information right now. A team member will assist you shortly.' Keep replies concise and friendly. Do not use asterisks or markdown formatting.";
+      "You are a helpful WhatsApp assistant. Be concise, honest, and never invent information that isn't in the context provided.";
 
     // 1. Embed the customer's question
     const queryEmbedding = await getEmbedding(customerText);
@@ -156,15 +158,11 @@ app.post("/webhook", async (req, res) => {
 
       if (searchError) console.error("Search error:", searchError);
 
-      const context = chunks?.map((c) => c.content).join("\n\n") ?? "";
+      const context = chunks?.map((c) => c.content).join("\n\n") || "(no matching listings found for this specific query)";
 
-      // 3. Generate AI reply with history
-      if (!context.trim()) {
-        replyText =
-          "I couldn't find that information. A team member will assist you shortly.";
-      } else {
-        replyText = await generateAIReply(systemPrompt, context, customerText, history);
-      }
+      // 3. Always let the model respond — it now knows how to handle
+      // greetings, partial info, and missing context gracefully via the system prompt.
+      replyText = await generateAIReply(systemPrompt, context, customerText, history);
     } else {
       replyText = "This number is not configured yet. Please contact support.";
     }
@@ -223,7 +221,7 @@ app.post("/api/test-ai", async (req, res) => {
       .single();
 
     const systemPrompt = company?.system_prompt ??
-      "You are a helpful WhatsApp customer support assistant. Answer ONLY using the context provided. If the answer is not in the context, say: 'I don't have that information right now. A team member will assist you shortly.' Keep replies concise and friendly.";
+      "You are a helpful WhatsApp assistant. Be concise, honest, and never invent information that isn't in the context provided.";
 
     const queryEmbedding = await getEmbedding(question);
 
@@ -396,6 +394,35 @@ app.get("/api/conversations", async (req, res) => {
 
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+// ── Clear a conversation's message history (useful for testing/reset) ──
+app.delete("/api/conversations/:id/messages", async (req, res) => {
+  const { clerk_user_id } = req.query;
+  if (!clerk_user_id) return res.status(400).json({ error: "Missing clerk_user_id" });
+
+  try {
+    const companyId = await getCompanyId(clerk_user_id);
+
+    // Confirm the conversation belongs to this company before wiping it
+    const { data: conv } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", req.params.id)
+      .eq("company_id", companyId)
+      .single();
+    if (!conv) return res.status(404).json({ error: "Conversation not found" });
+
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .eq("conversation_id", req.params.id);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true, cleared_conversation_id: req.params.id });
   } catch (err) {
     res.status(404).json({ error: err.message });
   }
