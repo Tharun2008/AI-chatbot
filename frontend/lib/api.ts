@@ -42,6 +42,14 @@ export async function updateConversationStatus(id: string, status: string, clerk
   return res.json();
 }
 
+export async function clearAllConversations(clerkUserId: string) {
+  const res = await fetch(`${API_URL}/api/conversations?clerk_user_id=${clerkUserId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to clear conversations");
+  return res.json();
+}
+
 export async function syncCompany(clerkUserId: string, businessName?: string) {
   const res = await fetch(`${API_URL}/api/company/sync`, {
     method: "POST",

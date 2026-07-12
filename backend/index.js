@@ -399,6 +399,45 @@ app.get("/api/conversations", async (req, res) => {
   }
 });
 
+// ── Clear ALL conversations + messages for a company (dashboard reset) ──
+app.delete("/api/conversations", async (req, res) => {
+  const { clerk_user_id } = req.query;
+  if (!clerk_user_id) return res.status(400).json({ error: "Missing clerk_user_id" });
+
+  try {
+    const companyId = await getCompanyId(clerk_user_id);
+
+    // Get all conversation ids for this company first
+    const { data: convs, error: fetchError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("company_id", companyId);
+
+    if (fetchError) return res.status(500).json({ error: fetchError.message });
+
+    const convIds = (convs ?? []).map((c) => c.id);
+
+    if (convIds.length > 0) {
+      // Delete messages first (foreign key), then the conversations themselves
+      const { error: msgError } = await supabase
+        .from("messages")
+        .delete()
+        .in("conversation_id", convIds);
+      if (msgError) return res.status(500).json({ error: msgError.message });
+
+      const { error: convError } = await supabase
+        .from("conversations")
+        .delete()
+        .eq("company_id", companyId);
+      if (convError) return res.status(500).json({ error: convError.message });
+    }
+
+    res.json({ success: true, cleared: convIds.length });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
 // ── Clear a conversation's message history (useful for testing/reset) ──
 app.delete("/api/conversations/:id/messages", async (req, res) => {
   const { clerk_user_id } = req.query;
