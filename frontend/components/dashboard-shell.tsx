@@ -17,6 +17,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
           {children}
         </main>
       </div>
+      <div className="fixed bottom-6 left-7.5 z-40 rounded-full bg-slate-950/85 px-4 py-2 text-xs font-medium text-white shadow-lg backdrop-blur">
+        Call +91 9840345889 for assistance
+      </div>
     </div>
   );
 }

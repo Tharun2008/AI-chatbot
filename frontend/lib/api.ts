@@ -50,12 +50,27 @@ export async function clearAllConversations(clerkUserId: string) {
   return res.json();
 }
 
-export async function syncCompany(clerkUserId: string, businessName?: string) {
+export async function syncCompany(
+  clerkUserId: string,
+  businessName?: string,
+  twilioWhatsappNumber?: string
+) {
   const res = await fetch(`${API_URL}/api/company/sync`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clerk_user_id: clerkUserId, business_name: businessName }),
+    body: JSON.stringify({
+      clerk_user_id: clerkUserId,
+      business_name: businessName,
+      twilio_whatsapp_number: twilioWhatsappNumber,
+    }),
   });
   if (!res.ok) throw new Error("Failed to sync company");
+  return res.json();
+}
+
+export async function getCompany(clerkUserId: string) {
+  const res = await fetch(`${API_URL}/api/company/${clerkUserId}`);
+  if (res.status === 404) return null; // no company row yet — that's fine, not an error
+  if (!res.ok) throw new Error("Failed to fetch company settings");
   return res.json();
 }

@@ -255,15 +255,24 @@ app.post("/api/test-ai", async (req, res) => {
 
 // ── Sync or create company ──
 app.post("/api/company/sync", async (req, res) => {
-  const { clerk_user_id, business_name } = req.body;
+  const { clerk_user_id, business_name, twilio_whatsapp_number } = req.body;
   if (!clerk_user_id) return res.status(400).json({ error: "Missing clerk_user_id" });
+
+  const { data: existing } = await supabase
+    .from("companies")
+    .select("id")
+    .eq("clerk_user_id", clerk_user_id)
+    .maybeSingle();
+
+  const payload = { clerk_user_id };
+  if (business_name !== undefined) payload.business_name = business_name;
+  if (twilio_whatsapp_number !== undefined) payload.twilio_whatsapp_number = twilio_whatsapp_number;
+  // Give a brand-new row a sensible default name if none was supplied yet
+  if (!existing && payload.business_name === undefined) payload.business_name = "My Business";
 
   const { data, error } = await supabase
     .from("companies")
-    .upsert(
-      { clerk_user_id, business_name: business_name || "My Business" },
-      { onConflict: "clerk_user_id" }
-    )
+    .upsert(payload, { onConflict: "clerk_user_id" })
     .select()
     .single();
 
